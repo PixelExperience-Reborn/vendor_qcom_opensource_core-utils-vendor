@@ -1,0 +1,77 @@
+name: AOSP17 Qualcomm core-utils-vendor QSPA source and AIDL dependency gate
+
+on:
+  push:
+    branches:
+      - audit/a17-qcom-core-utils-vendor-qspa-boundary-20261108
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-archived-qspa-and-cpu-helpers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout old QTI sources without any unrelated device trees
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: |
+            cpu-core-info
+            fwk-detect
+            qspaservice
+            docs
+            tests
+            .github
+
+      - name: Validate immutable independent Google AOSP17 manifest and 135 matrix
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/a17-manifest"
+          git -C "$RUNNER_TEMP/a17-manifest" remote add origin \
+            https://github.com/PixelExperience-Reborn/manifest.git
+          git -C "$RUNNER_TEMP/a17-manifest" fetch -q --depth 1 origin \
+            dea9fade705d68cec9cf29dd55ecf4b4574c703c
+          git -C "$RUNNER_TEMP/a17-manifest" checkout -q --detach FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/a17-manifest" rev-parse HEAD)" = \
+            "dea9fade705d68cec9cf29dd55ecf4b4574c703c"
+          python3 "$RUNNER_TEMP/a17-manifest/tools/validate_aosp17_base_profiles.py"
+          python3 -m unittest discover -s "$RUNNER_TEMP/a17-manifest/tools" \
+            -p test_aosp17_manifest_entrypoint.py -v
+          python3 "$RUNNER_TEMP/a17-manifest/tools/validate_135_repository_matrix.py"
+
+      - name: Fetch pinned Qualcomm system_ext fwk-detector Soong file for source comparison
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/a17-qti-refs"
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://raw.githubusercontent.com/PixelExperience-Reborn/vendor_qcom_opensource_core-utils-sys/5208eb34ee39a7514d10b7b109d1824b23564e85/fwk-detect/Android.bp" \
+            --output "$RUNNER_TEMP/a17-qti-refs/system-detector.Android.bp"
+          test -s "$RUNNER_TEMP/a17-qti-refs/system-detector.Android.bp"
+
+      - name: Verify original QSPA provider, VINTF, Soong and topology source boundaries
+        run: |
+          set -euo pipefail
+          PE_AOSP17_REFERENCE="$RUNNER_TEMP/a17-manifest/aosp17_reference.xml" \
+          PE_AOSP17_DEFAULT="$RUNNER_TEMP/a17-manifest/default.xml" \
+          PE_QCOM_SYSTEM_DETECT_BP="$RUNNER_TEMP/a17-qti-refs/system-detector.Android.bp" \
+            python3 tests/test_aosp17_qcom_core_utils_vendor_boundary.py
+
+      - name: Host Clang compile and test original Qualcomm vendor C detector
+        run: |
+          set -euo pipefail
+          clang -std=c11 -Wall -Wextra -Werror \
+            -I tests/host_stubs -I fwk-detect \
+            fwk-detect/vndfwk-detect.c tests/test_qti_vendor_detect_host.c \
+            -o "$RUNNER_TEMP/test_qti_vendor_detect_host"
+          "$RUNNER_TEMP/test_qti_vendor_detect_host"
+
+      - name: Accurate validation scope
+        run: |
+          echo "Static QSPA/CPU source checks and executable host C detector truth table."
+          echo "QSPA NDK AIDL module provider and Android17 Soong build NOT verified."
+          echo "No LF52406/LineageOS sources, kernel, SM8475 trees or optional features."
