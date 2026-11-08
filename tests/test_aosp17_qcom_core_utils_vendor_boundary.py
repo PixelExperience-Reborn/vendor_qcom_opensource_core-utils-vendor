@@ -16,7 +16,7 @@ ARCHIVE_COMMIT = "cbc8262034d43671f1e698efc640b01c525731e3"
 ARCHIVE_TREE = "2a3c1485414055c4be45a949fbe793e1f2dc2649"
 OLD_PATH = "vendor/qcom/opensource/core-utils-vendor"
 OLD_NAME = "vendor_qcom_opensource_core-utils-vendor"
-QSPA_MODULE = "vendor.qti.hardware.qspa-service"
+QSPA_MODULE = "vendor.qti.qspa-service"
 QSPA_AIDL = "vendor.qti.hardware.qspa-V1-ndk"
 
 
